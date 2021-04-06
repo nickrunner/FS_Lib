@@ -1,0 +1,53 @@
+package dev.firstseed.sports_reference;
+
+
+public class AbstractStatistic
+{
+    public double value;
+    public String name;
+    public double weight  = 0.5;
+    public boolean invert = false;
+    public boolean enabled = true;
+    public double normalizedValue;
+
+    public AbstractStatistic(String name, double value){
+        this.name = name;
+        this.value = value;
+        this.enabled = true;
+    }
+
+    public static double interpolate(double val, double min1, double max1, double min2, double max2)
+    {
+        double range1 = max1 - min1;
+        double range2 = max2 - min2;
+        double range3 = val - min1;
+
+        if(range1 == 0){
+            return 0;
+        }
+
+        double ratio = range3/range1;
+
+        return (range2 * ratio) + min2;
+    }
+
+    public void normalize(double min, double max){
+        normalizedValue = interpolate(value, min, max, 0.0, 1.0);
+        if(invert){
+            normalizedValue = 1.0 - normalizedValue;
+        }
+    }
+
+    public void setWeight(double weight){
+        this.weight = weight;
+    }
+
+
+    public void setEnabled(boolean enabled){
+        this.enabled = enabled;
+    }
+    public String toString(){
+        return name +"\tValue:"+value+"\tWeight:"+weight+"\t"+"NormVal:"+normalizedValue+"\tInvert:"+invert;
+    }
+
+}

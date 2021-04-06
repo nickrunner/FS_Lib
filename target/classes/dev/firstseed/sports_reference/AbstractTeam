@@ -1,0 +1,12 @@
+
+package dev.firstseed.sports_reference;
+
+
+public class AbstractTeam extends AbstractStatCreator
+{
+
+    public AbstractTeam(String uid, String name) {
+        super(uid, name);
+    }
+
+}
