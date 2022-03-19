@@ -10,57 +10,12 @@ import java.util.LinkedHashSet;
 
 public class StatModel
 {
-
-    private class StatModelElement
-    {
-        private double weight;
-        private HashMap<String, Double> correlations;
-        private LinkedHashSet<String> correlationStatNames;
-
-        public StatModelElement(double weight, LinkedHashSet<String> correlationStats)
-        {
-            this.correlationStatNames = correlationStats;
-            this.weight = weight;
-            this.correlations = new HashMap<>();
-            for(String  s : correlationStats)
-            {
-                correlations.put(s, 0.0);
-            }
-        }
-        public double getWeight() {
-            return weight;
-        }
-
-        public void setWeight(double weight) {
-            this.weight = weight;
-        }
-
-        public HashMap<String, Double> getCorrelations() {
-            return correlations;
-        }
-
-        public void setCorrelations(HashMap<String, Double> correlations) {
-            this.correlations = correlations;
-        }
-
-        public JsonObject toJson()
-        {
-            JsonObject json = new JsonObject();
-            json.addProperty("weight", weight);
-            JsonArray jsonArr = new JsonArray();
-            for(String s : correlationStatNames)
-            {
-                JsonObject cJson = new JsonObject();
-                cJson.addProperty(s, correlations.get(s));
-                jsonArr.add(cJson);
-            }
-            json.add("correlations", jsonArr);
-            return json;
-        }
-    }
-
     private HashMap<String, StatModelElement> statModelElements;
     private LinkedHashSet<String> statNames;
+
+    public StatModel(){
+        statModelElements = new HashMap<>();
+    }
 
     public StatModel(LinkedHashSet<String> statNames)
     {
@@ -69,7 +24,7 @@ public class StatModel
 
 
         for(String statName : statNames) {
-            addStat(statName, 0.00001);
+            setWeight(statName, 0.00001);
         }
     }
 
@@ -88,9 +43,17 @@ public class StatModel
         int i= 0;
         for(String statName : statNames)
         {
-            System.out.println("StatName: "+statName+" Json: "+jsonArr.get(i).getAsJsonObject().toString());
-            double weight = jsonArr.get(i).getAsJsonObject().get(statName).getAsJsonObject().get("weight").getAsDouble();
-            statModelElements.put(statName, new StatModelElement(weight, new LinkedHashSet<>()));
+            JsonObject statJson = jsonArr.get(i).getAsJsonObject().get(statName).getAsJsonObject();
+            double weight = statJson.get("weight").getAsDouble();
+
+            StatModelElement statModelElement = new StatModelElement(statName, weight);
+            try{
+                JsonArray correlations = statJson.getAsJsonArray("correlations");
+                statModelElement.setStatModel(new StatModel(correlations.toString()));
+            }catch (Exception e){
+
+            }
+            statModelElements.put(statName, statModelElement);
             i++;
         }
     }
@@ -101,10 +64,26 @@ public class StatModel
         statNames = (LinkedHashSet<String>)statModel.statNames.clone();
     }
 
+    public int calculateDepth(int fromDepth){
+        StatModelElement element = null;
+        for(String statName : statModelElements.keySet()){
+            element = statModelElements.get(statName);
+            if(element.isStatModelNull()){
+                return fromDepth;
+            }
+            break;
+        }
+        if(element != null){
+            return element.getStatModel().calculateDepth(fromDepth+1);
+        }
+        return 0;
+
+    }
+
     public JsonArray toJson()
     {
         JsonArray jsonArr = new JsonArray();
-        for(String statName : statNames)
+        for(String statName : statModelElements.keySet())
         {
             JsonObject json = new JsonObject();
             json.add(statName, statModelElements.get(statName).toJson());
@@ -138,45 +117,49 @@ public class StatModel
         return 0;
     }
 
-    public void addStat(String statName, double weight)
-    {
-        LinkedHashSet<String> correlationStats = (LinkedHashSet<String>) statNames.clone();
-        statModelElements.put(statName, new StatModelElement(weight, correlationStats));
-    }
+//    public void addStat(String statName, double weight)
+//    {
+//        LinkedHashSet<String> correlationStats = (LinkedHashSet<String>) statNames.clone();
+//        statModelElements.put(statName, new StatModelElement(weight, correlationStats));
+//    }
 
     public void setWeight(String statName, double weight)
     {
+        if(statModelElements.get(statName) == null){
+            statModelElements.put(statName, new StatModelElement(statName, weight));
+        }
         statModelElements.get(statName).setWeight(weight);
     }
 
-    public double getStatCorrelation(String s1, String s2)
+    public double getCorrelation(ArrayList<String> statChain, String stat)
     {
         if(statModelElements == null)
         {
             return 0;
         }
-        if(statModelElements.get(s1) == null)
-        {
+        StatModel model = getModelAtDepth(statChain);
+        if(model == null){
             return 0;
         }
-        if(statModelElements.get(s1).getCorrelations() == null)
-        {
-            return 0;
-        }
-        if(statModelElements.get(s1).getCorrelations().get(s2) == null)
-        {
-            return 0;
-        }
-        return statModelElements.get(s1).getCorrelations().get(s2);
+
+        return model.getWeight(stat);
     }
 
-    public void setStatCorrelation(String s1, String s2, double correlation)
+    public void setCorrelation(ArrayList<String> statChain, String statName,  double correlation)
     {
-        if(statModelElements.get(s1) == null)
-        {
-            statModelElements.put(s1,new StatModelElement(0.0001, statNames));
-        }
+//        if(statModelElements.get(s1) == null)
+//        {
+//            statModelElements.put(s1,new StatModelElement(s1,0.0001));
+//        }
+        getModelAtDepth(statChain).setWeight(statName, correlation);
+    }
 
-        statModelElements.get(s1).getCorrelations().put(s2, correlation);
+    public StatModel getModelAtDepth(ArrayList<String> stats){
+        StatModel model = statModelElements.get(stats.get(0)).getStatModel();
+
+        if(stats.size() > 1){
+            return model.getModelAtDepth(new ArrayList<>(stats.subList(1, stats.size())));
+        }
+        return model;
     }
 }

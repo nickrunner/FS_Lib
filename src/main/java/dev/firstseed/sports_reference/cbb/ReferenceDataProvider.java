@@ -127,8 +127,25 @@ public class ReferenceDataProvider
                 //System.out.println("\n\nREGION ********\n"+region.outerHtml()+"\n*********** REGION\n\n");
 
                 Element teamBr;
+                Element ffBr;
+                int ffSeed;
+                AbstractTeam ffTeam1;
+                AbstractTeam ffTeam2;
                 if(regionIndex < 4){
                     teamBr = region.getElementsByClass("team16").get(0);
+                    try{
+                        ffBr = region.getElementsByTag("p").get(0);
+                        ffSeed = Integer.parseInt(ffBr.getElementsByTag("strong").get(1).text());
+                        Elements teams = ffBr.getElementsByTag("a");
+                        String uid = teams.get(0).attr("href")+season.getYear()+".html";
+                        ffTeam1 = season.getTeamFromUid(uid);
+                        ffTeam2 = season.getTeamFromUid(teams.get(1).attr("href")+season.getYear()+".html");
+                        bracket.addFirstFourGame(regionIndex, ffSeed, new Game(ffTeam1, ffTeam2));
+                    }
+                    catch(Exception e){
+                        System.out.println("Failed parsing first four for: "+season.getYear());
+                    }
+
                     nationalFlag = false;
                 }
                 else{
@@ -194,7 +211,9 @@ public class ReferenceDataProvider
                                     }
                                     catch (Exception e1)
                                     {
-                                        System.out.println("Failed parsing tournament team");
+                                        //First Four
+
+                                        System.out.println("Failed parsing tournament team in "+season.getYear());
                                     }
 
                                     Game game = new Game(team1, team2);

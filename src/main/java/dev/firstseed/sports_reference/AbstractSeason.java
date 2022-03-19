@@ -28,6 +28,9 @@ public abstract class AbstractSeason
             if(team == null){
                 continue;
             }
+            if(!team.isInTournament){
+                continue;
+            }
             players.addAll(team.getRoster().getPlayers());
         }
 
@@ -38,6 +41,9 @@ public abstract class AbstractSeason
 
             for(AbstractTeam team : teams){
                 if(team == null){
+                    continue;
+                }
+                if(!team.isInTournament){
                     continue;
                 }
                 Statistic stat = team.getStat(statName);
@@ -139,6 +145,9 @@ public abstract class AbstractSeason
             if(team == null){
                 continue;
             }
+            if(!team.isInTournament){
+                continue;
+            }
             team.calculateOffensiveComposite(model);
             team.calculateDefensiveComposite(model);
             team.calculateGeneralComposite(model);
@@ -174,6 +183,9 @@ public abstract class AbstractSeason
             if(team == null){
                 continue;
             }
+            if(!team.isInTournament){
+                continue;
+            }
             team.getStat("OffComp").normalize(minOff, maxOff);
             team.getStat("DefComp").normalize(minDef, maxDef);
             team.getStat("GenComp").normalize(minGen, maxGen);
@@ -201,6 +213,9 @@ public abstract class AbstractSeason
 
         for(AbstractTeam team : teams){
             if(team == null){
+                continue;
+            }
+            if(!team.isInTournament){
                 continue;
             }
 
@@ -490,11 +505,13 @@ public abstract class AbstractSeason
 
     public AbstractTeam getTeamFromUid(String uid)
     {
+        //System.out.println("Getting team with uid: "+uid);
         for(AbstractTeam team : teams)
         {
             if(team == null){
                 continue;
             }
+            //System.out.println("ATUID: "+team.getUid());
             if(team.getUid().equals(uid))
             {
                 return team;
@@ -523,6 +540,12 @@ public abstract class AbstractSeason
     public NcaaBracket getPredictedBracket(StatModel model) {
         NcaaBracket predictedBracket = new NcaaBracket(getBracket());
         predictedBracket.resolve(model);
+        return predictedBracket;
+    }
+
+    public NcaaBracket getPredictedBracket(ArrayList<StatModel> models){
+        NcaaBracket predictedBracket = new NcaaBracket(getBracket());
+        predictedBracket.resolve(models, this);
         return predictedBracket;
     }
 
@@ -582,6 +605,9 @@ public abstract class AbstractSeason
                 {
                     correct++;
                 }
+//                else{
+//                    System.out.println("WRONG PICK "+predictedGame.toString()+" ACTUAL: "+actualGame.toString());
+//                }
 
 
             }

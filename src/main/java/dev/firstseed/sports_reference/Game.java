@@ -1,6 +1,9 @@
 package dev.firstseed.sports_reference;
 
 
+import java.text.DecimalFormat;
+import java.util.ArrayList;
+
 public class Game
 {
     public double confidence;
@@ -15,6 +18,15 @@ public class Game
     public int team1pts;
     public int team2pts;
 
+    public int team1Line;
+    public int team2Line;
+
+    public int winnerLine;
+    public int loserLine;
+    public double winnerDecimalOdds;
+    public double loserDecimalOdds;
+    public double winnerProbability;
+    public double loserProbability;
 
     public Game(AbstractTeam team1, AbstractTeam team2, int team1pts, int team2pts )
     {
@@ -47,6 +59,7 @@ public class Game
 
     public String toString()
     {
+
         if(this.winner == null)
         {
             return this.winnerPts+"\t"+"N/A"+"\n"+this.loserPts+"\t"+this.loser.name+"\n";
@@ -56,7 +69,15 @@ public class Game
             return this.winnerPts+"\t"+this.winner.name+"\n"+this.loserPts+"\t"+"N/A"+"\n";
         }
 
-        return this.winnerPts+"\t"+this.winner.name+"\n"+this.loserPts+"\t"+this.loser.name+"\n";
+        return this.winnerPts+
+                "\t"+this.winner.name+
+                "\t-"+this.winnerLine+
+                "\t"+Math.round(this.winnerProbability*100)+"%"+
+                "\n"+this.loserPts+
+                "\t"+this.loser.name+
+                "\t +"+this.loserLine+
+                "\t"+Math.round(this.loserProbability*100)+"%"+
+                "\n";
 
     }
 
@@ -85,65 +106,77 @@ public class Game
 
         double s1total = 0;
         double s2total = 0;
+        double weightTotal = 0;
         for(String s1 : model.getStatNames())
         {
 
             try{
                 double delta = team1.getStat(s1).getNormalizedValue() - team2.getStat(s1).getNormalizedValue();
                 s1total += delta * model.getWeight(s1);
-
-                for(String s2 : model.getStatNames())
+                weightTotal += Math.abs(model.getWeight(s1));
+                int depth =model.calculateDepth(1);
+                //System.out.println("Model depth: "+depth);
+                for(int i=1; i< depth; i++)
                 {
-                    try {
-                        double s11 = team1.getStat(s1).getNormalizedValue();
-                        double s12 = team1.getStat(s2).getNormalizedValue();
-                        double s21 = team2.getStat(s1).getNormalizedValue();
-                        double s22 = team2.getStat(s2).getNormalizedValue();
-
-                        if(model.getWeight(s1) < 0)
-                        {
-                            s11 = 1.0 - s11;
-                            s21 = 1.0 - s21;
-                        }
-
-                        if(model.getWeight(s2) < 0)
-                        {
-                            s12 = 1.0 - s12;
-                            s22 = 1.0 - s22;
-                        }
-
-                        double delta1 = s11 - s22;
-                        double delta2 = s21 - s12;
-                        double sc = model.getStatCorrelation(s1,s2);
-                        double x = (delta1*sc) + ((delta2)*(-1)*(sc));
-                        s2total += x;
-                    }
-                    catch (Exception e)
+                    for(String s2 : model.getStatNames())
                     {
 
+                        try {
+                            double s11 = team1.getStat(s1).getNormalizedValue();
+                            double s12 = team1.getStat(s2).getNormalizedValue();
+                            double s21 = team2.getStat(s1).getNormalizedValue();
+                            double s22 = team2.getStat(s2).getNormalizedValue();
+
+                            if(model.getWeight(s1) < 0)
+                            {
+                                s11 = 1.0 - s11;
+                                s21 = 1.0 - s21;
+                            }
+
+                            if(model.getWeight(s2) < 0)
+                            {
+                                s12 = 1.0 - s12;
+                                s22 = 1.0 - s22;
+                            }
+
+                            double delta1 = s11 - s22;
+                            double delta2 = s21 - s12;
+                            ArrayList<String> s1List = new ArrayList<>();
+                            s1List.add(s1);
+                            double sc = model.getCorrelation(s1List,s2);
+                            double x = (delta1*sc) - ((delta2)*(sc));
+                            s2total += x;
+                            weightTotal += model.getCorrelation(s1List,s2);
+                        }
+                        catch (Exception e) {}
                     }
                 }
-            }
-            catch (Exception e)
-            {
 
             }
+            catch (Exception e) {}
         }
         double total = (s1total ) + (s2total);
+        confidence = (Math.abs(total) / Math.abs(weightTotal))*100 ;
+        //double x = 50;
+        winnerProbability = ((100 + confidence) / 200);
+        loserProbability = ((100 - confidence) / 200);
+        winnerLine = (int)Math.round((100 * winnerProbability) / (1-winnerProbability));
+        loserLine = winnerLine;
         if(total > 0)
         {
             winner = team1;
             loser = team2;
+            team1Line = winnerLine;
+            team2Line = loserLine;
         }
         else{
             winner = team2;
             loser = team1;
+            team2Line = winnerLine;
+            team1Line = loserLine;
         }
-        confidence = Math.abs(total) * 100;
 
         try {
-
-
             double wPpg = Math.abs(winner.getStat("pts_PG").getValue());
             double wPpgW = Math.abs(model.getWeight("pts_PG"));
             double wOppPpg = Math.abs(winner.getStat("opp_pts_PG").getValue());
@@ -156,12 +189,9 @@ public class Game
             winnerPts = (int)Math.round(((wPpg*wPpgW) + (lOppPpg*lOppPpgW)) / (wPpgW + lOppPpgW));
             loserPts = (int)Math.round(((lPpg*lPpgW) + (wOppPpg*wOppPpgW)) / (lPpgW + wOppPpgW));
 
-
-
-
             double diff = winnerPts - loserPts;
-            winnerPts += (int)Math.round((diff* (confidence/90)));
-            loserPts -= (int)Math.round((diff * (confidence/90)));
+            winnerPts += (int)confidence;
+            loserPts -= (int)confidence;
 
             if(loserPts >= winnerPts){
                 loserPts = winnerPts - 1;
@@ -175,26 +205,8 @@ public class Game
                 team2pts = winnerPts;
                 team1pts = loserPts;
             }
-
-
-            //Log.d("GAME", winner.name+" "+val1+" "+loser.name+" "+val2+" Conf:"+confidence);
         }
-        catch (Exception e){
-           /* e.printStackTrace();
-            if(team1 != null){
-                Log.d("GAME", "T1 = "+team1.name);
-            }
-            else{
-                Log.d("GAME", "T1 is null");
-            }
-
-            if(team2 != null){
-                Log.d("GAME", "T2 = "+team2.name);
-            }
-            else{
-                Log.d("GAME", "T2 is null");
-            }*/
-        }
+        catch (Exception e){}
     }
 
     public Game(AbstractTeam team1, AbstractTeam team2){

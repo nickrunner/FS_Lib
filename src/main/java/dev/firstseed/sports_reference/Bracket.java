@@ -72,10 +72,6 @@ public class Bracket
         return 0;
     }
 
-//    public void addRound()
-//    {
-//        rounds.add(new ArrayList<Game>());
-//    }
 
     public void addGame(Game game, int round, int seed1, int seed2)
     {
@@ -84,18 +80,6 @@ public class Bracket
             System.out.println("Error: tried to add game where both teams were null");
             return;
         }
-/*        if(game.team1 == null)
-        {
-            System.out.println("Adding game: "+seed1+"."+"N/A"+" vs. "+seed2+"."+game.team2.name+"");
-        }
-        else if(game.team2 == null)
-        {
-            System.out.println("Adding game: "+seed1+"."+game.team1.name+" vs. "+seed2+"."+"N/A");
-        }
-
-        else{
-            System.out.println("Adding game: "+seed1+"."+game.team1.name+" vs. "+seed2+"."+game.team2.name+"");
-        }*/
 
         addTeam(game.team1, seed1);
         addTeam(game.team2, seed2);
@@ -107,6 +91,7 @@ public class Bracket
         //System.out.println("Adding Game: Round: "+round+"\n"+game.toString());
         rounds[round].add(game);
     }
+
 
     public ArrayList<Game> getRound(int round)
     {
@@ -157,7 +142,6 @@ public class Bracket
     {
         roundIndex = 0;
         resolve(rounds[0], model);
-
     }
 
     private void resolve(ArrayList<Game> games, StatModel model){
@@ -183,8 +167,35 @@ public class Bracket
             nextRound.add(new Game(game1.winner, game2.winner));
         }
         rounds[roundIndex++] = games;
-
         resolve(nextRound, model);
-
     }
+
+    public void resolve(ArrayList<StatModel> models, AbstractSeason season)
+    {
+        roundIndex = 0;
+        resolve(rounds[0], models, season);
+    }
+
+    private void resolve(ArrayList<Game> games, ArrayList<StatModel> models, AbstractSeason season){
+        //System.out.println("Resolving round: "+roundIndex+" with "+games.size()+" games");
+        if(games.size() == 1){
+            games.set(0, new GameSim(models, games.get(0), season).sim);
+            rounds[roundIndex++] = games;
+            roundIndex = 0;
+            return;
+        }
+
+        ArrayList<Game> nextRound = new ArrayList<>();
+        for(int i=0; i<games.size(); i+=2){
+            Game game1 = new GameSim(models, games.get(i), season).sim;
+            Game game2 = new GameSim(models, games.get(i+1), season).sim;
+            System.out.println(game1);
+            System.out.println(game2);
+
+            nextRound.add(new Game(game1.winner, game2.winner));
+        }
+        rounds[roundIndex++] = games;
+        resolve(nextRound, models, season);
+    }
+
 }

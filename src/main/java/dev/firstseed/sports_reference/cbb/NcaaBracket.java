@@ -1,21 +1,34 @@
 package dev.firstseed.sports_reference.cbb;
 
-import dev.firstseed.sports_reference.AbstractTeam;
-import dev.firstseed.sports_reference.Bracket;
-import dev.firstseed.sports_reference.Game;
+import dev.firstseed.sports_reference.*;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 public class NcaaBracket extends Bracket
 {
+    public class FirstFourGame{
+        int region;
+        int seed;
+        Game game;
+        public FirstFourGame(int region, int seed, Game game){
+            this.region = region;
+            this.seed = seed;
+            this.game = game;
+        }
+    }
+
+    private HashMap<Integer, FirstFourGame> firstFourGameMap = new HashMap<Integer, FirstFourGame>();
     public NcaaBracket()
     {
         super(64);
     }
 
-    public NcaaBracket(Bracket bracket)
+    public NcaaBracket(NcaaBracket bracket)
     {
         super(bracket);
+        this.firstFourGameMap = (HashMap<Integer, FirstFourGame>) bracket.firstFourGameMap.clone();
     }
 
     public void addTeam(Team team, int region, int seed)
@@ -24,6 +37,51 @@ public class NcaaBracket extends Bracket
         {
             super.addTeam(team, region*seed);
         }
+    }
+
+    public void addFirstFourGame(int region, int seed, Game game){
+        System.out.println("Adding First Four game: "+region+" seed: "+seed+" game: "+game.team1.name+" vs. "+game.team2.name);
+        firstFourGameMap.put(region, new FirstFourGame(region, seed, game));
+    }
+
+    @Override
+    public void resolve(StatModel model) {
+        ArrayList<Game> round = getRound(0);
+        for(int region : firstFourGameMap.keySet()){
+            int seed = getOverallSeed(region+1, firstFourGameMap.get(region).seed);
+            Game game = firstFourGameMap.get(region).game;
+            System.out.println("Game: "+game.team1.name+" vs. "+game.team2.name);
+            game.predictOutcome(model);
+            AbstractTeam team = game.winner;
+            System.out.println("Handling first four with overall seed: "+seed+" in region "+region+" seed: "+firstFourGameMap.get(region).seed+" Game: "+game);
+            addTeam(team, seed);
+            for(Game rGame : round){
+                if(rGame.team2 == null){
+                    rGame.team2 = team;
+                    break;
+                }
+            }
+        }
+        super.resolve(model);
+    }
+
+    @Override
+    public void resolve(ArrayList<StatModel> models, AbstractSeason season) {
+        ArrayList<Game> round = getRound(0);
+        for(int region : firstFourGameMap.keySet()){
+            int seed = getOverallSeed(region+1, firstFourGameMap.get(region).seed);
+            Game game = new GameSim(models,firstFourGameMap.get(region).game, season).sim;
+            AbstractTeam team = game.winner;
+            System.out.println("Handling first four with overall seed: "+seed+" in region "+region+" seed: "+firstFourGameMap.get(region).seed+" Game: "+game);
+            addTeam(team, seed);
+            for(Game rGame : round){
+                if(rGame.team2 == null){
+                    rGame.team2 = team;
+                    break;
+                }
+            }
+        }
+        super.resolve(models, season);
     }
 
     private int getOverallSeed(int region, int seed)

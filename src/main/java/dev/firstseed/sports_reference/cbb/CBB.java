@@ -55,6 +55,9 @@ public class CBB implements OnReferenceDataReadyListener
         yearsToDownload = endYear - startYear +1;
         for(int i=startYear; i<=endYear; i++)
         {
+            if(i == 2020){
+                continue;
+            }
             downloadSeason(i);
         }
     }
@@ -99,7 +102,7 @@ public class CBB implements OnReferenceDataReadyListener
 
     public StatModel getStatModel(final int startYear, final int endYear, LinkedHashSet<String> statNames) {
         System.out.println("Getting training data from " + startYear + " to " + endYear);
-        yearsToDownload = endYear - startYear + 1;
+        yearsToDownload = endYear - startYear + 1 -1;
         yearsDownloaded = 0;
         HashMap<String, Double> scoreMap = new HashMap<>();
         HashMap<String, Integer> countMap = new HashMap<>();
@@ -114,6 +117,9 @@ public class CBB implements OnReferenceDataReadyListener
 
         for (int i = startYear; i <= endYear; i++)
         {
+            if(i == 2020){
+                continue;
+            }
             System.out.println("\nDownloading season for reference: " + i);
             Season season = getSeason(i);
 
@@ -135,13 +141,16 @@ public class CBB implements OnReferenceDataReadyListener
                     {
                         if (game == null) {
                             System.out.println("Null game in round " + r + " year " + season.getYear());
+                            continue;
                         }
                         if (game.winner == null) {
                             System.out.println("Null winner " + r + " year " + season.getYear());
+                            continue;
                         }
 
                         if (game.loser == null) {
                             System.out.println("Null loser " + r + " year " + season.getYear());
+                            continue;
                         }
                         Statistic ws1 = game.winner.getStat(s1);
                         Statistic ls1 = game.loser.getStat(s1);
@@ -158,14 +167,6 @@ public class CBB implements OnReferenceDataReadyListener
                         int count = countMap.get(s1) + 1;
                         countMap.put(s1, count);
 
-/*                        for(String s2 : model.getStatNames())
-                        {
-                            Statistic ws2 = game.winner.getStat(s2);
-                            Statistic ls2 = game.loser.getStat(s2);
-                            diff = ws1.getNormalizedValue() - ls2.getNormalizedValue();
-                            score = diff * (game.winnerPts - game.loserPts) * r;
-
-                        }*/
                     }
                 }
             }
@@ -182,38 +183,70 @@ public class CBB implements OnReferenceDataReadyListener
                 scoreMap.put(s1, 0.0);
             }
             model.setWeight(s1, scoreMap.get(s1));
- /*           for(String s2 : statNames)
-            {
-                model.setStatCorrelation(s1, s2, s2Map.get(s1).get(s2)/count);
-            }
-*/
-            //System.out.println("CBB: Training Result: " + s1 + " -> " + model.getWeight(s1));
         }
-        //Find min/max of scores to do normalization
-       /* double min = 1;
-        double max = 0;
-        for (String statName : statNames)
-        {
-            if (scoreMap.get(statName) < min) {
-                min = scoreMap.get(statName);
-            }
-            if (scoreMap.get(statName) > max) {
-                max = scoreMap.get(statName);
-            }
-        }*/
-
-/*        for (String statName : statNames)
-        {
-            //Normalize each score. We need normalized values to set the weight
-            //double score = scoreMap.get(statName);
-            //scoreMap.put(statName, Util.interpolate(score, min, max, 0.0, 1.0));
-
-        }*/
 
         return model;
     }
 
-    private void adjustModel(StatModel model, int year, ArrayList<String> statFilter, double gain)
+    private void adjustCorrlations(StatModel model, ArrayList<String> chain, String s2, Game aGame, double gain, int r ){
+        String s1 = chain.get(chain.size()-1);
+        Statistic ls2 = aGame.loser.getStat(s2);
+        Statistic ws1 = aGame.winner.getStat(s1);
+        if(ls2 != null) {
+            double ls2Val = ls2.getNormalizedValue();
+            double ws1Val = ws1.getNormalizedValue();
+            if(model.getWeight(s2) < 0)
+            {
+                ls2Val = 1.0 - ls2Val;
+            }
+            if(model.getWeight(s1) <0)
+            {
+                ws1Val = 1.0 - ws1Val;
+            }
+            double diff = ws1Val - ls2Val;
+            double adder = diff*gain;;
+            //System.out.println("SC: "+model.getStatCorrelation(s1, s2)+" Adder: "+adder);
+
+            double correlation = model.getCorrelation(chain, s2) + adder;
+            model.setCorrelation(chain, s2, correlation);
+            //model.setStatCorrelation(s1, s2, adder);
+        }
+    }
+    private void correlateToDepth(StatModel model, ArrayList<String> chain, Game aGame, double gain,int r, int depth){
+        for(int i=1; i<depth; i++){
+            for (String s2 : model.getStatNames()) {
+                adjustCorrlations(model, chain, s2, aGame, gain, r);
+                ArrayList<String> rChain = new ArrayList<>(chain);
+                rChain.add(s2);
+                correlateToDepth(model, rChain, aGame, gain, r,depth-1);
+            }
+        }
+    }
+
+    private void processStat(StatModel model, String s1, Game aGame, double gain, int r, int depth){
+        Statistic ws1 = aGame.winner.getStat(s1);
+        Statistic ls1 = aGame.loser.getStat(s1);
+        try {
+            double diff = ws1.getNormalizedValue() - ls1.getNormalizedValue();
+            double adder = getAdder(diff ,gain,(aGame.winnerPts - aGame.loserPts), r);
+            model.setWeight(s1, model.getWeight(s1) + adder);
+
+        } catch (Exception e) {
+            //System.out.println("..."+s1);
+            e.printStackTrace();
+            throw e;
+        }
+        ArrayList<String> chain = new ArrayList<String>();
+        chain.add(s1);
+        correlateToDepth(model, chain, aGame, gain,r, depth);
+
+    }
+
+    private double getAdder(double diff, double gain, double spread, double round){
+        return diff * gain;
+    }
+
+    private void adjustModel(StatModel model, int year, ArrayList<String> statFilter, double gain, int depth)
     {
         //StatModel copyModel = new StatModel(model);
         // getSeason(year).calculateComposites(model);
@@ -222,123 +255,94 @@ public class CBB implements OnReferenceDataReadyListener
         for (int r = 0; r < getSeason(year).getBracket().getNumberOfRounds(); r++) {
             for (int g = 0; g< getSeason(year).getBracket().getRound(r).size(); g++) {
                 Game aGame = getSeason(year).getBracket().getRound(r).get(g);
+                if(aGame == null || aGame.winner == null || aGame.loser == null ){
+                    continue;
+                }
                 Game pGame = new Game(aGame.team1, aGame.team2);
+
                 pGame.predictOutcome(model);
                 if (! (aGame.winner.name.equals(pGame.winner.name) && aGame.loser.name.equals(pGame.loser.name) )) {
                     //We made the wrong prediction... adjust model
                     for (String s1 : statNames) {
-                        Statistic ws1 = aGame.winner.getStat(s1);
-                        Statistic ls1 = aGame.loser.getStat(s1);
-                        try {
-                            double diff = ws1.getNormalizedValue() - ls1.getNormalizedValue();
-                            double adder = diff * gain;// * (aGame.winnerPts - aGame.loserPts) * r;
-                            model.setWeight(s1, model.getWeight(s1) + adder);
-
-                        } catch (Exception e) {
-                            //System.out.println("..."+s1);
+                        try{
+                            processStat(model, s1, aGame, gain,r, depth);
+                        }
+                        catch(Exception e){
+                            e.printStackTrace();
+                            throw e;
                         }
 
-
-                        for (String s2 : model.getStatNames()) {
-                            Statistic ls2 = aGame.loser.getStat(s2);
-                            Statistic ws2 = aGame.winner.getStat(s2);
-                            if(ls2 != null) {
-                                double ls2Val = ls2.getNormalizedValue();
-                                double ws1Val = ws1.getNormalizedValue();
-                                if(model.getWeight(s2) < 0)
-                                {
-                                    ls2Val = 1.0 - ls2Val;
-                                }
-                                if(model.getWeight(s1) <0)
-                                {
-                                    ws1Val = 1.0 - ws1Val;
-                                }
-                                double diff = ws1Val - ls2Val;
-                                double adder = diff * gain; //* (aGame.winnerPts - aGame.loserPts) * r;
-                                //System.out.println("SC: "+model.getStatCorrelation(s1, s2)+" Adder: "+adder);
-                                model.setStatCorrelation(s1, s2, model.getStatCorrelation(s1, s2) + adder);
-                                //model.setStatCorrelation(s1, s2, adder);
-                            }
-                        }
                     }
                 }
             }
         }
     }
 
-    public double adjustModel(StatModel model, ArrayList<String> statFilter, double gain, int startYear, int endYear)
+    public double adjustModel(StatModel model, ArrayList<String> statFilter, double gain, int startYear, int endYear, int depth)
     {
-        ArrayList<Thread> threads = new ArrayList();
+        ArrayList<Thread> threads = new ArrayList<>();
+        int skip = 0;
 
         for(int i=startYear; i<=endYear; i++)
         {
+            if(i == 2020){
+                skip++;
+                continue;
+            }
             final int year = i;
-            Thread t = new Thread(() -> adjustModel(model, year, statFilter, gain));
+            Thread t = new Thread(() -> adjustModel(model, year, statFilter, gain, depth));
             threads.add(t);
-            //adjustModel(model, i, statFilter, gain);
         }
-        ThreadHelper threadHelper = new ThreadHelper(endYear-startYear+1);
+        ThreadHelper threadHelper = new ThreadHelper(endYear-startYear+1-skip);
         threadHelper.run(threads);
 
-        //double correct = 0;
         double total = 0;
-/*        for(Game aGame : games)
-        {
-            Game pGame = new Game(aGame.team1, aGame.team2);
-            total++;
-            pGame.predictOutcome(model);
-            if (aGame.winner.name.equals(pGame.winner.name) && aGame.loser.name.equals(pGame.loser.name)) {
-                correct++;
-            }
-        }
-        return correct/total;*/
 
+        skip=0;
         for(int i=startYear; i<=endYear; i++)
         {
+            if(i == 2020){
+                skip++;
+                continue;
+            }
             total += getSeason(i).getPredictionAccuracy(model);
 
         }
-        return total/(endYear-startYear+1);
+        return total/(endYear-startYear+1-skip);
 
 
     }
 
-    public double adjustModelForScore(StatModel model, ArrayList<String> statFilter, double gain, int startYear, int endYear)
+    public double adjustModelForScore(StatModel model, ArrayList<String> statFilter, double gain, int startYear, int endYear, int depth)
     {
-        ArrayList<Thread> threads = new ArrayList();
-
-
-        ArrayList<Game> games = new ArrayList();
+        ArrayList<Thread> threads = new ArrayList<>();
+        int skip=0;
         for(int i=startYear; i<=endYear; i++)
         {
-            games.addAll(getSeason(i).getBracketGames());
+            if(i == 2020){
+                skip++;
+                continue;
+            }
             final int year = i;
-            Thread t = new Thread(() -> adjustModel(model, year, statFilter, gain));
+
+            Thread t = new Thread(() -> adjustModel(model, year, statFilter, gain, depth));
             threads.add(t);
-            //adjustModel(model, i, statFilter, gain);
         }
-        ThreadHelper threadHelper = new ThreadHelper(endYear-startYear+1);
+        ThreadHelper threadHelper = new ThreadHelper(endYear-startYear+1-skip);
         threadHelper.run(threads);
 
-        //double correct = 0;
         double total = 0;
-/*        for(Game aGame : games)
-        {
-            Game pGame = new Game(aGame.team1, aGame.team2);
-            total++;
-            pGame.predictOutcome(model);
-            if (aGame.winner.name.equals(pGame.winner.name) && aGame.loser.name.equals(pGame.loser.name)) {
-                correct++;
-            }
-        }
-        return correct/total;*/
-
+        skip =0;
         for(int i=startYear; i<=endYear; i++)
         {
+            if(i == 2020){
+                skip++;
+                continue;
+            }
             total += getSeason(i).getPredictedBracketScore(model);
 
         }
-        return total/(endYear-startYear+1);
+        return total/(endYear-startYear+1-skip);
 
 
     }
